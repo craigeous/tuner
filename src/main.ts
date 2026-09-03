@@ -185,21 +185,48 @@ appRoot.innerHTML = `
           <canvas id="pitch-trace-canvas"></canvas>
         </div>
 
-        <!-- VU Level & Noise Gate Controls -->
+        <!-- VU Level & Microphone Sensitivity Controls -->
         <div class="audio-meter-bar">
-          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">MIC LEVEL</span>
-          <div class="vu-meter-wrap">
-            <div class="vu-meter-level" id="vu-meter-bar"></div>
+          <div class="meter-row-top">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">MIC LEVEL</span>
+            <div class="vu-meter-wrap">
+              <div class="vu-meter-level" id="vu-meter-bar"></div>
+            </div>
+            <button type="button" class="btn-boost-quick ${audioInput.getInputGain() >= 3 ? 'active' : ''}" id="btn-quick-ipad-boost" title="Preamp boost for iPad Pro/Air mic arrays">
+              ⚡ iPad / Quiet Mic Boost
+            </button>
           </div>
-          <div class="gate-control-wrap">
-            <label for="noise-gate-slider">Gate Threshold:</label>
-            <input type="range" id="noise-gate-slider" min="0.002" max="0.04" step="0.002" value="0.008" />
-          </div>
-          <div class="gate-control-wrap">
-            <label>
-              <input type="checkbox" id="raw-audio-toggle" checked />
-              Raw Musician Audio
-            </label>
+
+          <div class="meter-controls-grid">
+            <!-- Digital Preamp Boost Slider -->
+            <div class="gate-control-wrap" title="Software preamp gain multiplier. Boosts quiet tablet microphone arrays.">
+              <label for="mic-gain-slider">Preamp Gain:</label>
+              <input type="range" id="mic-gain-slider" min="1" max="10" step="0.5" value="${audioInput.getInputGain()}" style="width: 80px;" />
+              <span class="value-text" id="mic-gain-label" style="min-width: 42px;">${audioInput.getInputGain().toFixed(1)}x</span>
+            </div>
+
+            <!-- Noise Gate Slider -->
+            <div class="gate-control-wrap" title="Lower values detect softer notes; higher values filter out background noise">
+              <label for="noise-gate-slider">Gate:</label>
+              <input type="range" id="noise-gate-slider" min="0.0003" max="0.02" step="0.0003" value="${audioInput.getNoiseGate()}" style="width: 80px;" />
+              <span class="value-text" id="noise-gate-label" style="min-width: 48px;">${(audioInput.getNoiseGate() * 1000).toFixed(1)}m</span>
+            </div>
+
+            <!-- Auto Gain Control Toggle -->
+            <div class="gate-control-wrap">
+              <label title="Engages hardware automatic gain leveling in iPadOS/browser">
+                <input type="checkbox" id="auto-gain-toggle" ${audioInput.getAutoGainControl() ? 'checked' : ''} />
+                Auto-Gain (AGC)
+              </label>
+            </div>
+
+            <!-- Raw Audio Toggle -->
+            <div class="gate-control-wrap">
+              <label title="Disables echo cancellation and noise suppression for instruments">
+                <input type="checkbox" id="raw-audio-toggle" ${audioInput.getRawAudioMode() ? 'checked' : ''} />
+                Raw Musician Audio
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -651,14 +678,50 @@ btnMute.addEventListener('click', () => {
 });
 
 // --------------------------------------------------------------------------
-// Noise Gate & Raw Audio Mode
+// Microphone Preamp Sensitivity, Noise Gate & Audio Mode
 // --------------------------------------------------------------------------
+const micGainSlider = document.querySelector<HTMLInputElement>('#mic-gain-slider')!;
+const micGainLabel = document.querySelector<HTMLSpanElement>('#mic-gain-label')!;
+const btnQuickIpadBoost = document.querySelector<HTMLButtonElement>('#btn-quick-ipad-boost')!;
 const noiseGateSlider = document.querySelector<HTMLInputElement>('#noise-gate-slider')!;
-noiseGateSlider.addEventListener('input', () => {
-  audioInput.setNoiseGate(parseFloat(noiseGateSlider.value));
+const noiseGateLabel = document.querySelector<HTMLSpanElement>('#noise-gate-label')!;
+const autoGainToggle = document.querySelector<HTMLInputElement>('#auto-gain-toggle')!;
+const rawAudioToggle = document.querySelector<HTMLInputElement>('#raw-audio-toggle')!;
+
+function updateGainDisplay(gain: number): void {
+  audioInput.setInputGain(gain);
+  micGainSlider.value = String(gain);
+  micGainLabel.textContent = `${gain.toFixed(1)}x`;
+  btnQuickIpadBoost.classList.toggle('active', gain >= 3.0);
+  try {
+    localStorage.setItem('tunerlab_mic_gain', String(gain));
+  } catch {}
+}
+
+micGainSlider.addEventListener('input', () => {
+  const val = parseFloat(micGainSlider.value);
+  updateGainDisplay(val);
 });
 
-const rawAudioToggle = document.querySelector<HTMLInputElement>('#raw-audio-toggle')!;
+btnQuickIpadBoost.addEventListener('click', () => {
+  const current = audioInput.getInputGain();
+  const nextGain = current >= 3.0 ? 1.0 : 4.0;
+  updateGainDisplay(nextGain);
+});
+
+noiseGateSlider.addEventListener('input', () => {
+  const val = parseFloat(noiseGateSlider.value);
+  audioInput.setNoiseGate(val);
+  noiseGateLabel.textContent = `${(val * 1000).toFixed(1)}m`;
+  try {
+    localStorage.setItem('tunerlab_noise_gate', String(val));
+  } catch {}
+});
+
+autoGainToggle.addEventListener('change', () => {
+  audioInput.setAutoGainControl(autoGainToggle.checked);
+});
+
 rawAudioToggle.addEventListener('change', () => {
   audioInput.setRawAudioMode(rawAudioToggle.checked);
 });

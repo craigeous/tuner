@@ -18,10 +18,19 @@ export interface PitchFrame {
 
 export type FrameListener = (frame: PitchFrame) => void;
 
+export function isAppleTablet(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
 export class AudioInputEngine {
   private audioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private preampGainNode: GainNode | null = null;
   private highpassFilter: BiquadFilterNode | null = null;
   private lowpassFilter: BiquadFilterNode | null = null;
   private analyserNode: AnalyserNode | null = null;
@@ -41,8 +50,11 @@ export class AudioInputEngine {
   // Settings
   private a4 = 440;
   private notation: NotationType = 'sharp';
-  private noiseGateThreshold = 0.008;
-  private rawAudioMode = true; // disable browser AGC/noise suppression for music
+  // Lower noise gate default (0.002) and default iPad boost (4x) for quiet studio mic arrays
+  private noiseGateThreshold = isAppleTablet() ? 0.0015 : 0.0025;
+  private inputGain = isAppleTablet() ? 4.0 : 1.0;
+  private autoGainControl = isAppleTablet();
+  private rawAudioMode = true; // disable browser AGC/noise suppression for music unless AGC is active
 
   // Rolling pitch history for UI graph (last ~300 frames)
   private history: { time: number; freq: number; cents: number; inTune: boolean; rms: number }[] = [];
@@ -74,11 +86,34 @@ export class AudioInputEngine {
   }
 
   public setNoiseGate(threshold: number): void {
-    this.noiseGateThreshold = Math.max(0.001, Math.min(0.08, threshold));
+    this.noiseGateThreshold = Math.max(0.0003, Math.min(0.08, threshold));
   }
 
   public getNoiseGate(): number {
     return this.noiseGateThreshold;
+  }
+
+  public setInputGain(multiplier: number): void {
+    this.inputGain = Math.max(0.5, Math.min(20, multiplier));
+    if (this.preampGainNode && this.audioCtx) {
+      this.preampGainNode.gain.setValueAtTime(this.inputGain, this.audioCtx.currentTime);
+    }
+  }
+
+  public getInputGain(): number {
+    return this.inputGain;
+  }
+
+  public setAutoGainControl(enable: boolean): void {
+    this.autoGainControl = enable;
+    if (this.isRunning) {
+      this.stop();
+      this.start();
+    }
+  }
+
+  public getAutoGainControl(): boolean {
+    return this.autoGainControl;
   }
 
   public setRawAudioMode(enableRaw: boolean): void {
@@ -126,12 +161,12 @@ export class AudioInputEngine {
         ? {
             echoCancellation: false,
             noiseSuppression: false,
-            autoGainControl: false,
+            autoGainControl: this.autoGainControl,
           }
         : {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: false,
+            autoGainControl: true,
           };
 
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -140,6 +175,10 @@ export class AudioInputEngine {
       });
 
       this.sourceNode = this.audioCtx.createMediaStreamSource(this.mediaStream);
+
+      // Digital Preamp Gain Node (vital for iPad Pro/Air low-volume mic arrays)
+      this.preampGainNode = this.audioCtx.createGain();
+      this.preampGainNode.gain.setValueAtTime(this.inputGain, this.audioCtx.currentTime);
 
       // Low-cut high-pass filter at 32Hz (eliminates DC thumps and table vibrations)
       this.highpassFilter = this.audioCtx.createBiquadFilter();
@@ -156,8 +195,9 @@ export class AudioInputEngine {
       this.analyserNode.fftSize = this.fftSize;
       this.analyserNode.smoothingTimeConstant = 0.1;
 
-      // Audio routing graph: Source -> Highpass -> Lowpass -> Analyser
-      this.sourceNode.connect(this.highpassFilter);
+      // Audio routing graph: Source -> Preamp Gain -> Highpass -> Lowpass -> Analyser
+      this.sourceNode.connect(this.preampGainNode);
+      this.preampGainNode.connect(this.highpassFilter);
       this.highpassFilter.connect(this.lowpassFilter);
       this.lowpassFilter.connect(this.analyserNode);
 
@@ -189,6 +229,11 @@ export class AudioInputEngine {
     if (this.sourceNode) {
       this.sourceNode.disconnect();
       this.sourceNode = null;
+    }
+
+    if (this.preampGainNode) {
+      this.preampGainNode.disconnect();
+      this.preampGainNode = null;
     }
 
     if (this.highpassFilter) {

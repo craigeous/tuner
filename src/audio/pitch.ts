@@ -103,7 +103,7 @@ export function autoCorrelate(
   sampleRate: number,
   minFreq: number = 30,
   maxFreq: number = 2200,
-  noiseGateThreshold: number = 0.008
+  noiseGateThreshold: number = 0.002
 ): PitchResult {
   const bufferLength = buffer.length;
 
