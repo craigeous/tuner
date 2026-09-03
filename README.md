@@ -34,6 +34,11 @@ A high-precision, low-latency web application designed for tuning musical instru
   - Interactive intonation exercise: hear a target pitch, then sing or play into the mic to match it.
   - Real-time animated bullseye ring, streak counter, and audio chime confirmations.
 
+## Live Demo
+
+- **Hosted Web App:** [https://craigeous.github.io/tuner/](https://craigeous.github.io/tuner/)
+  *(Works on desktop and mobile phones with full microphone access over trusted HTTPS).*
+
 ## Getting Started
 
 ### Prerequisites
