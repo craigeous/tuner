@@ -863,10 +863,116 @@ input[type="range"] {
   width: 100%;
 }
 
-.piano-controls {
+.piano-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.piano-octave-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.piano-layout-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.layout-toggle-group {
+  display: flex;
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.btn-layout-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-layout-toggle:hover {
+  color: #fff;
+}
+
+.btn-layout-toggle.active {
+  background: #1e293b;
+  color: var(--accent-cyan);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.key-hint-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.kbd-hint {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  margin-left: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.piano-keyboard-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.guide-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.guide-badge {
+  background: #1e293b;
+  color: var(--accent-cyan);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.guide-text {
+  color: var(--text-secondary);
+}
+
+.guide-text strong {
+  color: #fff;
 }
 
 .btn-octave {
@@ -878,6 +984,8 @@ input[type="range"] {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
 
 .btn-octave:disabled {
@@ -912,6 +1020,43 @@ input[type="range"] {
   justify-content: center;
   padding-bottom: 8px;
   transition: transform 0.05s ease, background-color 0.1s ease;
+}
+
+.piano-key .key-binding-hint {
+  position: absolute;
+  top: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 4px;
+  pointer-events: none;
+  line-height: 1;
+  transition: all 0.1s ease;
+}
+
+.white-key .key-binding-hint {
+  background: rgba(15, 23, 42, 0.08);
+  color: #64748b;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.black-key .key-binding-hint {
+  background: rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  top: 6px;
+  font-size: 0.6rem;
+}
+
+.white-key.active-played .key-binding-hint {
+  background: #1e40af;
+  color: #fff;
+}
+
+.black-key.active-played .key-binding-hint {
+  background: #38bdf8;
+  color: #0f172a;
 }
 
 .piano-key .key-label {

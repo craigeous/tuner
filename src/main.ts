@@ -335,9 +335,11 @@ appRoot.innerHTML = `
   <footer class="app-footer">
     <div class="footer-shortcuts">
       <span>Shortcuts:</span>
-      <kbd>Space</kbd> Toggle Mic &bull;
-      <kbd>1-4</kbd> Switch Tabs &bull;
-      <kbd>D</kbd> Toggle Drone &bull;
+      <kbd>Space</kbd> Mic &bull;
+      <kbd>1-4</kbd> Tabs &bull;
+      <kbd>Z-M / Q-I</kbd> Play Piano &bull;
+      <kbd>[ / ]</kbd> Octaves &bull;
+      <kbd>D</kbd> Drone &bull;
       <kbd>M</kbd> Mute
     </div>
     <div>TunerLab &bull; Web Audio & DSP Pitch Detection</div>
@@ -747,8 +749,10 @@ vizButtons.forEach((btn) => {
 // --------------------------------------------------------------------------
 const tabButtons = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
 const tabPanels = document.querySelectorAll<HTMLElement>('.tab-panel');
+let currentTab: string = 'tuner';
 
 function switchTab(tabId: string): void {
+  currentTab = tabId;
   tabButtons.forEach((btn) => {
     const isActive = btn.getAttribute('data-tab') === tabId;
     btn.classList.toggle('active', isActive);
@@ -886,6 +890,12 @@ window.addEventListener('keydown', (e) => {
   // Ignore when typing in inputs/selects
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
 
+  // If on Piano tab, let piano handle musical note keys and octave changes!
+  if (currentTab === 'piano') {
+    const handled = piano.handleKeyDown(e);
+    if (handled) return;
+  }
+
   if (e.code === 'Space') {
     e.preventDefault();
     toggleMicrophone();
@@ -897,9 +907,15 @@ window.addEventListener('keydown', (e) => {
     switchTab('piano');
   } else if (e.key === '4') {
     switchTab('trainer');
-  } else if (e.key.toLowerCase() === 'd') {
+  } else if (e.key.toLowerCase() === 'd' && currentTab !== 'piano') {
     btnDroneToggle.click();
-  } else if (e.key.toLowerCase() === 'm') {
+  } else if (e.key.toLowerCase() === 'm' && currentTab !== 'piano') {
     btnMute.click();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (currentTab === 'piano') {
+    piano.handleKeyUp(e);
   }
 });
