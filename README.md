@@ -28,8 +28,13 @@ A high-precision, low-latency web application designed for tuning musical instru
   - Exact frequency slider with 0.1 Hz resolution and master volume/mute.
 - **Interactive Piano Roll**:
   - Full keyboard with octave shift controls (C1 to C8).
-  - Click to play reference notes.
-  - **Dynamic pitch match visualization**: Keys light up when detected by the microphone!
+  - **Full Computer Keyboard Bindings**: Play all 25 notes across 2 octaves directly using your physical keyboard.
+    - **Dual-Row Layout (2 Full Octaves)**: Lower octave on `Z–M` (whites) + `S D G H J` (blacks); Upper octave on `Q–I` (whites) + `2 3 5 6 7` (blacks).
+    - **GarageBand Layout**: Home row white keys on `A–K` + top row black keys on `W E T Y U O P`.
+  - **Octave Shifting from Keyboard**: Shift octaves up and down with `[` and `]` (brackets), `◀` / `▶` arrow keys, or `Z` / `X` (in GarageBand mode).
+  - Visual keyboard shortcut badges on every key (toggleable).
+  - Polyphonic keyboard playback with natural key release envelopes.
+  - **Dynamic pitch match visualization**: Keys light up in glowing emerald green when detected by the microphone!
 - **Pitch Match Trainer (Ear & Voice Training)**:
   - Interactive intonation exercise: hear a target pitch, then sing or play into the mic to match it.
   - Real-time animated bullseye ring, streak counter, and audio chime confirmations.
