@@ -1,8 +1,8 @@
 /**
- * Interactive Sheet Music Staff Component.
- * Supports choosing clef (Treble, Bass, Alto, Tenor), placing notes with
- * accidentals and durations, playback sequencing, and real-time microphone
- * pitch tracking directly onto the staff lines and spaces.
+ * Interactive Sheet Music Staff Component with Complete Timing Controls.
+ * Supports choosing clef (Treble, Bass, Alto, Tenor), time signatures (4/4, 3/4, 2/4, 6/8),
+ * note durations (Whole, Half, Quarter, Eighth, Sixteenth), editing timing of placed notes,
+ * visual measure barlines, metronome clicks, and real-time microphone pitch tracking.
  */
 
 import { freqFromMidi } from '../audio/pitch.ts';
@@ -12,7 +12,8 @@ import { MiniTuner } from './miniTuner.ts';
 
 export type ClefType = 'treble' | 'bass' | 'alto' | 'tenor';
 export type AccidentalType = '' | '#' | 'b';
-export type NoteDurationType = 'whole' | 'half' | 'quarter' | 'eighth';
+export type NoteDurationType = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
+export type TimeSignatureType = '4/4' | '3/4' | '2/4' | '6/8';
 
 export interface PlacedNote {
   id: string;
@@ -31,7 +32,6 @@ interface ClefConfig {
   symbol: string;
   bottomLineStep: number; // Diatonic step of Line 1 (bottom line)
   referenceDescription: string;
-  clefSvgPath?: string;
 }
 
 const CLEF_CONFIGS: Record<ClefType, ClefConfig> = {
@@ -61,6 +61,20 @@ const CLEF_CONFIGS: Record<ClefType, ClefConfig> = {
   },
 };
 
+interface TimeSignatureConfig {
+  name: string;
+  top: number;
+  bottom: number;
+  beatsPerMeasure: number; // in quarter-note equivalents
+}
+
+const TIME_SIGNATURE_CONFIGS: Record<TimeSignatureType, TimeSignatureConfig> = {
+  '4/4': { name: '4/4 Common', top: 4, bottom: 4, beatsPerMeasure: 4 },
+  '3/4': { name: '3/4 Waltz', top: 3, bottom: 4, beatsPerMeasure: 3 },
+  '2/4': { name: '2/4 March', top: 2, bottom: 4, beatsPerMeasure: 2 },
+  '6/8': { name: '6/8 Compound', top: 6, bottom: 8, beatsPerMeasure: 3 },
+};
+
 const DIATONIC_LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const SEMITONES_FROM_C: Record<string, number> = {
   C: 0,
@@ -77,6 +91,7 @@ const DURATION_BEATS: Record<NoteDurationType, number> = {
   half: 2,
   quarter: 1,
   eighth: 0.5,
+  sixteenth: 0.25,
 };
 
 export class SheetMusicStaff {
@@ -84,15 +99,20 @@ export class SheetMusicStaff {
   private toneGen: ToneGenerator;
   private a4: number;
 
-  // Staff State
+  // Staff & Timing State
   private activeClef: ClefType = 'treble';
+  private activeTimeSignature: TimeSignatureType = '4/4';
   private activeAccidental: AccidentalType = '';
   private activeDuration: NoteDurationType = 'quarter';
   private placedNotes: PlacedNote[] = [];
+  private selectedNoteIndex: number | null = null;
+
+  // Playback & Metronome State
   private tempoBpm: number = 100;
   private isPlayingSequence: boolean = false;
   private playbackTimeoutId: number | null = null;
   private activePlayingNoteIndex: number | null = null;
+  private enableMetronome: boolean = true;
   private showMicIndicator: boolean = true;
 
   // Cached DOM & SVG elements
@@ -104,9 +124,10 @@ export class SheetMusicStaff {
   private tempoLabelEl!: HTMLElement;
   private tempoSliderEl!: HTMLInputElement;
   private playBtnEl!: HTMLButtonElement;
+  private selectionStatusEl!: HTMLElement;
 
   // Coordinates & Layout Constants
-  private readonly staffLeft = 110;
+  private readonly staffLeft = 120;
   private readonly staffRight = 770;
   private readonly line1Y = 144; // Bottom line (Line 1)
   private readonly stepHeight = 8; // Half of line spacing (16px / 2 = 8px)
@@ -133,6 +154,39 @@ export class SheetMusicStaff {
     this.render();
   }
 
+  public setTimeSignature(sig: TimeSignatureType): void {
+    this.activeTimeSignature = sig;
+    this.render();
+  }
+
+  public setDuration(duration: NoteDurationType): void {
+    this.activeDuration = duration;
+
+    // If a note is currently selected, update its duration directly!
+    if (this.selectedNoteIndex !== null && this.placedNotes[this.selectedNoteIndex]) {
+      const note = this.placedNotes[this.selectedNoteIndex];
+      note.duration = duration;
+      note.beats = DURATION_BEATS[duration];
+      this.renderNotes();
+      this.updateSelectionStatus();
+    }
+  }
+
+  public setAccidental(accidental: AccidentalType): void {
+    this.activeAccidental = accidental;
+
+    // If a note is currently selected, update its accidental directly!
+    if (this.selectedNoteIndex !== null && this.placedNotes[this.selectedNoteIndex]) {
+      const note = this.placedNotes[this.selectedNoteIndex];
+      note.accidental = accidental;
+      const { midi, freq } = this.stepToNoteInfo(note.diatonicStep, accidental);
+      note.midi = midi;
+      note.freq = freq;
+      this.renderNotes();
+      this.updateSelectionStatus();
+    }
+  }
+
   /**
    * Updates the live microphone marker on the staff in real-time.
    */
@@ -149,7 +203,6 @@ export class SheetMusicStaff {
     }
 
     const n = frame.note;
-    // Determine diatonic step from detected note name and octave
     const letter = n.noteName[0];
     const letterIdx = DIATONIC_LETTERS.indexOf(letter);
     if (letterIdx === -1) return;
@@ -159,10 +212,8 @@ export class SheetMusicStaff {
     const stepDiff = diatonicStep - config.bottomLineStep;
     const y = this.line1Y - stepDiff * this.stepHeight;
 
-    // Show mic indicator at the current note's pitch height
     this.micIndicatorGroupEl.style.display = 'block';
     this.micIndicatorGroupEl.innerHTML = `
-      <!-- Glowing halo -->
       <circle cx="70" cy="${y}" r="11" fill="rgba(16, 185, 129, 0.25)" class="mic-halo-pulse" />
       <circle cx="70" cy="${y}" r="6.5" fill="#10b981" stroke="#fff" stroke-width="1.8" />
       <text x="82" y="${y + 4}" font-size="11" font-weight="700" fill="#10b981" font-family="monospace">
@@ -200,8 +251,8 @@ export class SheetMusicStaff {
   }
 
   public addNoteAtStep(step: number): void {
-    if (this.placedNotes.length >= 16) {
-      alert('Staff is full (16 notes maximum). Click "Clear Staff" to start a new sequence.');
+    if (this.placedNotes.length >= 20) {
+      alert('Staff has reached maximum notes (20 notes). Clear or delete notes to add more.');
       return;
     }
 
@@ -220,55 +271,84 @@ export class SheetMusicStaff {
     };
 
     this.placedNotes.push(newNote);
-    this.toneGen.playNote(freq, 0.9, 'acoustic');
+    this.selectedNoteIndex = this.placedNotes.length - 1;
+    this.toneGen.playNote(freq, 0.8, 'acoustic');
     this.renderNotes();
+    this.updateSelectionStatus();
   }
 
   public removeLastNote(): void {
     if (this.placedNotes.length > 0) {
       this.placedNotes.pop();
+      if (this.selectedNoteIndex !== null && this.selectedNoteIndex >= this.placedNotes.length) {
+        this.selectedNoteIndex = null;
+      }
       this.renderNotes();
+      this.updateSelectionStatus();
     }
   }
 
   public clearNotes(): void {
     this.stopPlayback();
     this.placedNotes = [];
+    this.selectedNoteIndex = null;
     this.renderNotes();
+    this.updateSelectionStatus();
   }
 
   public loadExampleMelody(): void {
     this.stopPlayback();
     this.placedNotes = [];
+    this.selectedNoteIndex = null;
 
     if (this.activeClef === 'treble') {
-      // Ode to Joy snippet (Treble)
-      const steps = [
-        32, 32, 33, 34, 34, 33, 32, 31, 30, 30, 31, 32, 32, 31, 31, // E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4 D4 D4
-      ];
-      for (const s of steps.slice(0, 12)) {
-        const { octave, baseLetter, midi, freq } = this.stepToNoteInfo(s, '');
-        this.placedNotes.push({
-          id: `ex_${Math.random()}`,
-          diatonicStep: s,
-          baseLetter,
-          accidental: '',
-          octave,
-          midi,
-          freq,
-          duration: 'quarter',
-          beats: 1,
+      if (this.activeTimeSignature === '3/4') {
+        // Waltz rhythm in 3/4
+        const steps = [28, 30, 32, 33, 32, 30, 28, 32, 35]; // C4 D4 E4 F4 E4 D4 C4 E4 G4
+        const durs: NoteDurationType[] = ['half', 'quarter', 'half', 'quarter', 'quarter', 'quarter', 'quarter', 'half', 'quarter'];
+        steps.forEach((s, i) => {
+          const { octave, baseLetter, midi, freq } = this.stepToNoteInfo(s, '');
+          const dur = durs[i] || 'quarter';
+          this.placedNotes.push({
+            id: `ex_${i}`,
+            diatonicStep: s,
+            baseLetter,
+            accidental: '',
+            octave,
+            midi,
+            freq,
+            duration: dur,
+            beats: DURATION_BEATS[dur],
+          });
+        });
+      } else {
+        // 4/4 Ode to Joy
+        const steps = [32, 32, 33, 34, 34, 33, 32, 31, 30, 30, 31, 32, 32, 31, 31];
+        steps.slice(0, 12).forEach((s, i) => {
+          const { octave, baseLetter, midi, freq } = this.stepToNoteInfo(s, '');
+          const dur: NoteDurationType = i === 11 ? 'half' : 'quarter';
+          this.placedNotes.push({
+            id: `ex_${i}`,
+            diatonicStep: s,
+            baseLetter,
+            accidental: '',
+            octave,
+            midi,
+            freq,
+            duration: dur,
+            beats: DURATION_BEATS[dur],
+          });
         });
       }
     } else {
-      // C Major Arpeggio for Bass/Alto/Tenor
+      // Arpeggio pattern
       const base = CLEF_CONFIGS[this.activeClef].bottomLineStep;
-      const offsets = [0, 2, 4, 7, 9, 7, 4, 2];
-      for (const off of offsets) {
+      const offsets = [0, 2, 4, 7, 9, 7, 4, 0];
+      offsets.forEach((off, i) => {
         const s = base + off;
         const { octave, baseLetter, midi, freq } = this.stepToNoteInfo(s, '');
         this.placedNotes.push({
-          id: `ex_${Math.random()}`,
+          id: `ex_${i}`,
           diatonicStep: s,
           baseLetter,
           accidental: '',
@@ -278,10 +358,11 @@ export class SheetMusicStaff {
           duration: 'quarter',
           beats: 1,
         });
-      }
+      });
     }
 
     this.renderNotes();
+    this.updateSelectionStatus();
   }
 
   public startPlayback(): void {
@@ -291,6 +372,7 @@ export class SheetMusicStaff {
     this.playBtnEl.classList.add('active');
 
     let idx = 0;
+    const secondsPerBeat = 60 / this.tempoBpm;
 
     const playNext = () => {
       if (!this.isPlayingSequence) return;
@@ -304,16 +386,31 @@ export class SheetMusicStaff {
       this.activePlayingNoteIndex = idx;
       this.renderNotes();
 
-      const secondsPerBeat = 60 / this.tempoBpm;
       const noteDurationSeconds = note.beats * secondsPerBeat;
 
-      this.toneGen.playNote(note.freq, noteDurationSeconds * 0.95, 'acoustic');
+      // Metronome click on beat
+      if (this.enableMetronome) {
+        const isMeasureStart = idx === 0 || this.isMeasureBoundary(idx);
+        const clickFreq = isMeasureStart ? 1100 : 750;
+        this.toneGen.playNote(clickFreq, 0.035, 'sine');
+      }
+
+      this.toneGen.playNote(note.freq, Math.max(0.1, noteDurationSeconds * 0.92), 'acoustic');
 
       idx++;
       this.playbackTimeoutId = window.setTimeout(playNext, noteDurationSeconds * 1000);
     };
 
     playNext();
+  }
+
+  private isMeasureBoundary(noteIdx: number): boolean {
+    const beatsPerMeasure = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature].beatsPerMeasure;
+    let sum = 0;
+    for (let i = 0; i < noteIdx; i++) {
+      sum += this.placedNotes[i].beats;
+    }
+    return sum > 0 && Math.abs(sum % beatsPerMeasure) < 0.01;
   }
 
   public stopPlayback(): void {
@@ -330,11 +427,32 @@ export class SheetMusicStaff {
     this.renderNotes();
   }
 
+  private updateSelectionStatus(): void {
+    if (!this.selectionStatusEl) return;
+
+    if (this.selectedNoteIndex !== null && this.placedNotes[this.selectedNoteIndex]) {
+      const n = this.placedNotes[this.selectedNoteIndex];
+      this.selectionStatusEl.innerHTML = `
+        <div class="note-selected-pill">
+          <span>🎯 Note ${this.selectedNoteIndex + 1}: <strong>${n.baseLetter}${n.accidental}${n.octave}</strong> (${n.duration}, ${n.beats} beat${n.beats === 1 ? '' : 's'})</span>
+          <span class="selection-action-tip">👉 Click Duration or Accidental buttons above to edit timing in-place.</span>
+          <button type="button" class="btn-deselect-note" id="btn-deselect-note" title="Deselect note">✕</button>
+        </div>
+      `;
+      this.selectionStatusEl.querySelector('#btn-deselect-note')?.addEventListener('click', () => {
+        this.selectedNoteIndex = null;
+        this.renderNotes();
+        this.updateSelectionStatus();
+      });
+    } else {
+      this.selectionStatusEl.innerHTML = '';
+    }
+  }
+
   private renderLedgerLines(x: number, stepDiff: number): string {
     let out = '';
     const halfWidth = 14;
 
-    // Ledger lines below Line 1 (stepDiff <= -2)
     if (stepDiff <= -2) {
       for (let s = -2; s >= stepDiff; s -= 2) {
         const ly = this.line1Y - s * this.stepHeight;
@@ -342,7 +460,6 @@ export class SheetMusicStaff {
       }
     }
 
-    // Ledger lines above Line 5 (stepDiff >= 10, since Line 5 is stepDiff 8)
     if (stepDiff >= 10) {
       for (let s = 10; s <= stepDiff; s += 2) {
         const ly = this.line1Y - s * this.stepHeight;
@@ -361,7 +478,11 @@ export class SheetMusicStaff {
     if (count === 0) return;
 
     const availableWidth = this.staffRight - this.staffLeft - 40;
-    const spacing = count > 1 ? Math.min(55, availableWidth / count) : 60;
+    const spacing = count > 1 ? Math.min(52, availableWidth / count) : 60;
+    const beatsPerMeasure = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature].beatsPerMeasure;
+
+    let accumulatedBeats = 0;
+    let measureCount = 1;
 
     this.placedNotes.forEach((n, idx) => {
       const x = this.staffLeft + 35 + idx * spacing;
@@ -369,17 +490,24 @@ export class SheetMusicStaff {
       const config = CLEF_CONFIGS[this.activeClef];
       const stepDiff = n.diatonicStep - config.bottomLineStep;
 
-      // Stem orientation: stems up for notes below middle line (stepDiff < 4), stems down for notes on/above Line 3
       const stemUp = stepDiff < 4;
       const stemHeight = 36;
       const stemX = stemUp ? x + 6.5 : x - 6.5;
       const stemY2 = stemUp ? y - stemHeight : y + stemHeight;
 
       const isPlaying = idx === this.activePlayingNoteIndex;
-      const noteColor = isPlaying ? '#10b981' : '#f8fafc';
-      const glowFilter = isPlaying ? 'filter: drop-shadow(0 0 10px #10b981);' : '';
+      const isSelected = idx === this.selectedNoteIndex;
 
-      // Hollow notehead for whole and half notes
+      let noteColor = '#f8fafc';
+      if (isPlaying) noteColor = '#10b981';
+      else if (isSelected) noteColor = '#38bdf8';
+
+      const glowFilter = isPlaying
+        ? 'filter: drop-shadow(0 0 10px #10b981);'
+        : isSelected
+          ? 'filter: drop-shadow(0 0 8px #38bdf8);'
+          : '';
+
       const isHollow = n.duration === 'whole' || n.duration === 'half';
       const hasStem = n.duration !== 'whole';
 
@@ -388,13 +516,34 @@ export class SheetMusicStaff {
       if (n.accidental === 'b') accidentalText = '♭';
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.setAttribute('class', `placed-note-group ${isPlaying ? 'playing' : ''}`);
+      g.setAttribute('class', `placed-note-group ${isPlaying ? 'playing' : ''} ${isSelected ? 'selected' : ''}`);
       g.setAttribute('data-idx', String(idx));
       g.style.cursor = 'pointer';
+
+      // Build flags for eighth and sixteenth notes
+      let flagsSvg = '';
+      if (n.duration === 'eighth' && hasStem) {
+        flagsSvg = stemUp
+          ? `<path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 + 10} ${stemX + 8} ${stemY2 + 20}" stroke="${noteColor}" stroke-width="2" fill="none" />`
+          : `<path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 - 10} ${stemX + 8} ${stemY2 - 20}" stroke="${noteColor}" stroke-width="2" fill="none" />`;
+      } else if (n.duration === 'sixteenth' && hasStem) {
+        flagsSvg = stemUp
+          ? `
+            <path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 + 8} ${stemX + 8} ${stemY2 + 16}" stroke="${noteColor}" stroke-width="2" fill="none" />
+            <path d="M ${stemX} ${stemY2 + 7} Q ${stemX + 10} ${stemY2 + 15} ${stemX + 8} ${stemY2 + 23}" stroke="${noteColor}" stroke-width="2" fill="none" />
+          `
+          : `
+            <path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 - 8} ${stemX + 8} ${stemY2 - 16}" stroke="${noteColor}" stroke-width="2" fill="none" />
+            <path d="M ${stemX} ${stemY2 - 7} Q ${stemX + 10} ${stemY2 - 15} ${stemX + 8} ${stemY2 - 23}" stroke="${noteColor}" stroke-width="2" fill="none" />
+          `;
+      }
 
       g.innerHTML = `
         <!-- Click target hitbox -->
         <rect x="${x - 18}" y="${Math.min(y, stemY2) - 10}" width="36" height="${Math.abs(stemHeight) + 25}" fill="transparent" />
+
+        <!-- Selection Halo Ring -->
+        ${isSelected ? `<circle cx="${x}" cy="${y}" r="14" fill="rgba(56, 189, 248, 0.2)" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3 2" />` : ''}
 
         <!-- Ledger lines -->
         ${this.renderLedgerLines(x, stepDiff)}
@@ -422,43 +571,62 @@ export class SheetMusicStaff {
             : ''
         }
 
-        <!-- Flag for eighth notes -->
-        ${
-          n.duration === 'eighth' && hasStem
-            ? stemUp
-              ? `<path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 + 10} ${stemX + 8} ${stemY2 + 20}" stroke="${noteColor}" stroke-width="2" fill="none" />`
-              : `<path d="M ${stemX} ${stemY2} Q ${stemX + 10} ${stemY2 - 10} ${stemX + 8} ${stemY2 - 20}" stroke="${noteColor}" stroke-width="2" fill="none" />`
-            : ''
-        }
+        <!-- Flags -->
+        ${flagsSvg}
 
-        <!-- Pitch Label below -->
-        <text x="${x}" y="210" font-size="11" font-weight="700" fill="${noteColor}" text-anchor="middle" font-family="monospace">
+        <!-- Pitch & Duration Label below -->
+        <text x="${x}" y="206" font-size="10" font-weight="700" fill="${noteColor}" text-anchor="middle" font-family="monospace">
           ${n.baseLetter}${n.accidental}${n.octave}
+        </text>
+        <text x="${x}" y="218" font-size="9" font-weight="600" fill="var(--text-muted)" text-anchor="middle">
+          ${n.duration}
         </text>
 
         <!-- Delete button on hover -->
-        <circle cx="${x}" cy="226" r="7" fill="#ef4444" class="note-delete-btn" />
-        <text x="${x}" y="229" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle" pointer-events="none">&times;</text>
+        <circle cx="${x}" cy="230" r="6.5" fill="#ef4444" class="note-delete-btn" />
+        <text x="${x}" y="233" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle" pointer-events="none">&times;</text>
       `;
 
-      // Click to solo play or delete note
+      // Click note to select and edit its timing/duration, or delete
       g.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target.classList.contains('note-delete-btn')) {
           e.stopPropagation();
           this.placedNotes.splice(idx, 1);
+          if (this.selectedNoteIndex === idx) this.selectedNoteIndex = null;
+          else if (this.selectedNoteIndex !== null && this.selectedNoteIndex > idx) this.selectedNoteIndex--;
           this.renderNotes();
+          this.updateSelectionStatus();
         } else {
-          this.toneGen.playNote(n.freq, 1.0, 'acoustic');
+          e.stopPropagation();
+          this.selectedNoteIndex = idx;
+          this.toneGen.playNote(n.freq, 0.8, 'acoustic');
+          this.renderNotes();
+          this.updateSelectionStatus();
         }
       });
 
       this.notesGroupEl.appendChild(g);
+
+      // Measure Barline calculation
+      accumulatedBeats += n.beats;
+      if (idx < count - 1 && accumulatedBeats >= beatsPerMeasure) {
+        const barX = x + spacing / 2;
+        const barG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        barG.innerHTML = `
+          <line x1="${barX}" y1="80" x2="${barX}" y2="144" stroke="rgba(255, 255, 255, 0.55)" stroke-width="1.8" />
+          <text x="${barX + 4}" y="74" font-size="9" font-weight="bold" fill="var(--text-muted)">m.${measureCount + 1}</text>
+        `;
+        this.notesGroupEl.appendChild(barG);
+        measureCount++;
+        accumulatedBeats = 0;
+      }
     });
   }
 
   public render(): void {
-    const config = CLEF_CONFIGS[this.activeClef];
+    const clefConfig = CLEF_CONFIGS[this.activeClef];
+    const timeConfig = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature];
 
     this.container.innerHTML = `
       <div class="sheet-music-card">
@@ -466,7 +634,7 @@ export class SheetMusicStaff {
         <div class="sheet-header">
           <div class="sheet-title-wrap">
             <h2>Interactive Sheet Music Staff</h2>
-            <p>Pick a clef, select note values and accidentals, then click anywhere on the staff lines to place notes and compose melodies.</p>
+            <p>Pick clef, set time signature & timing, place notes on staff lines, and edit note values with live audio playback.</p>
           </div>
 
           <!-- Embedded Live Pitch Monitor -->
@@ -494,9 +662,50 @@ export class SheetMusicStaff {
             </div>
           </div>
 
-          <!-- 2. Accidental Selector -->
+          <!-- 2. Time Signature (Timing) -->
           <div class="toolbar-group">
-            <span class="group-label">Accidental:</span>
+            <span class="group-label">Time Signature:</span>
+            <div class="pill-buttons">
+              <button type="button" class="pill-btn ${this.activeTimeSignature === '4/4' ? 'active' : ''}" data-time="4/4" title="4/4 Common Time (4 beats/measure)">
+                4/4
+              </button>
+              <button type="button" class="pill-btn ${this.activeTimeSignature === '3/4' ? 'active' : ''}" data-time="3/4" title="3/4 Waltz Time (3 beats/measure)">
+                3/4
+              </button>
+              <button type="button" class="pill-btn ${this.activeTimeSignature === '2/4' ? 'active' : ''}" data-time="2/4" title="2/4 March Time (2 beats/measure)">
+                2/4
+              </button>
+              <button type="button" class="pill-btn ${this.activeTimeSignature === '6/8' ? 'active' : ''}" data-time="6/8" title="6/8 Compound Time">
+                6/8
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Note Duration / Timing -->
+          <div class="toolbar-group">
+            <span class="group-label">Note Timing:</span>
+            <div class="pill-buttons">
+              <button type="button" class="pill-btn ${this.activeDuration === 'quarter' ? 'active' : ''}" data-duration="quarter" title="Quarter Note (1 beat)">
+                ♩ Quarter (1b)
+              </button>
+              <button type="button" class="pill-btn ${this.activeDuration === 'half' ? 'active' : ''}" data-duration="half" title="Half Note (2 beats)">
+                𝅗𝅥 Half (2b)
+              </button>
+              <button type="button" class="pill-btn ${this.activeDuration === 'whole' ? 'active' : ''}" data-duration="whole" title="Whole Note (4 beats)">
+                𝅝 Whole (4b)
+              </button>
+              <button type="button" class="pill-btn ${this.activeDuration === 'eighth' ? 'active' : ''}" data-duration="eighth" title="Eighth Note (0.5 beat)">
+                ♪ 8th (0.5b)
+              </button>
+              <button type="button" class="pill-btn ${this.activeDuration === 'sixteenth' ? 'active' : ''}" data-duration="sixteenth" title="Sixteenth Note (0.25 beat)">
+                𝅘𝅥𝅯 16th (0.25b)
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. Accidental Selector -->
+          <div class="toolbar-group">
+            <span class="group-label">Pitch:</span>
             <div class="pill-buttons">
               <button type="button" class="pill-btn ${this.activeAccidental === '' ? 'active' : ''}" data-accidental="" title="Natural">
                 ♮ Natural
@@ -510,26 +719,7 @@ export class SheetMusicStaff {
             </div>
           </div>
 
-          <!-- 3. Note Duration -->
-          <div class="toolbar-group">
-            <span class="group-label">Duration:</span>
-            <div class="pill-buttons">
-              <button type="button" class="pill-btn ${this.activeDuration === 'quarter' ? 'active' : ''}" data-duration="quarter" title="Quarter Note (1 beat)">
-                ♩ Quarter
-              </button>
-              <button type="button" class="pill-btn ${this.activeDuration === 'half' ? 'active' : ''}" data-duration="half" title="Half Note (2 beats)">
-                𝅗𝅥 Half
-              </button>
-              <button type="button" class="pill-btn ${this.activeDuration === 'whole' ? 'active' : ''}" data-duration="whole" title="Whole Note (4 beats)">
-                𝅝 Whole
-              </button>
-              <button type="button" class="pill-btn ${this.activeDuration === 'eighth' ? 'active' : ''}" data-duration="eighth" title="Eighth Note (0.5 beat)">
-                ♪ Eighth
-              </button>
-            </div>
-          </div>
-
-          <!-- 4. Playback and Actions -->
+          <!-- 5. Playback and Actions -->
           <div class="toolbar-group">
             <div class="playback-actions">
               <button type="button" class="btn-sheet-play" id="btn-sheet-play">
@@ -548,21 +738,29 @@ export class SheetMusicStaff {
           </div>
         </div>
 
-        <!-- Tempo & Mic Options Strip -->
+        <!-- Note Selection Timing Status Bar -->
+        <div id="sheet-selection-status"></div>
+
+        <!-- Tempo & Timing Options Strip -->
         <div class="sheet-options-strip">
           <div class="tempo-control-wrap">
-            <label for="sheet-tempo-slider">Tempo:</label>
-            <input type="range" id="sheet-tempo-slider" min="50" max="200" step="5" value="${this.tempoBpm}" />
+            <label for="sheet-tempo-slider">Playback Tempo:</label>
+            <input type="range" id="sheet-tempo-slider" min="40" max="220" step="5" value="${this.tempoBpm}" />
             <span class="value-text" id="sheet-tempo-val">${this.tempoBpm} BPM</span>
           </div>
 
+          <label class="sheet-checkbox-label" title="Play audible woodblock click on beats during playback">
+            <input type="checkbox" id="sheet-metronome-toggle" ${this.enableMetronome ? 'checked' : ''} />
+            <span>🥁 Metronome Beat Click</span>
+          </label>
+
           <label class="sheet-checkbox-label">
             <input type="checkbox" id="sheet-mic-toggle" ${this.showMicIndicator ? 'checked' : ''} />
-            <span>Show Microphone Pitch Tracking on Staff</span>
+            <span>🎤 Live Mic Pitch on Staff</span>
           </label>
 
           <span class="sheet-clef-desc">
-            <strong>${config.name}:</strong> ${config.referenceDescription}
+            <strong>${clefConfig.name} • ${timeConfig.name}</strong> (${timeConfig.beatsPerMeasure} beats/measure)
           </span>
         </div>
 
@@ -591,17 +789,21 @@ export class SheetMusicStaff {
               font-weight="bold"
               pointer-events="none"
               style="user-select: none;">
-              ${config.symbol}
+              ${clefConfig.symbol}
             </text>
 
-            <!-- 4/4 Time Signature -->
-            <text x="${this.staffLeft - 2}" y="108" font-size="22" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">4</text>
-            <text x="${this.staffLeft - 2}" y="136" font-size="22" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">4</text>
+            <!-- Dynamic Time Signature (Top / Bottom Numbers) -->
+            <text x="${this.staffLeft + 2}" y="108" font-size="22" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
+              ${timeConfig.top}
+            </text>
+            <text x="${this.staffLeft + 2}" y="136" font-size="22" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
+              ${timeConfig.bottom}
+            </text>
 
             <!-- Interactive Clickable Staff Area -->
-            <rect id="staff-interaction-area" x="${this.staffLeft}" y="30" width="${this.staffRight - this.staffLeft}" height="175" fill="transparent" style="cursor: crosshair;" />
+            <rect id="staff-interaction-area" x="${this.staffLeft + 16}" y="30" width="${this.staffRight - this.staffLeft - 16}" height="175" fill="transparent" style="cursor: crosshair;" />
 
-            <!-- Group for Placed Notes -->
+            <!-- Group for Placed Notes & Measure Barlines -->
             <g id="staff-notes-group"></g>
 
             <!-- Group for Hover Ghost Note -->
@@ -613,7 +815,7 @@ export class SheetMusicStaff {
         </div>
 
         <div class="sheet-footer-hint">
-          <span>💡 <strong>Tip:</strong> Hover over any line or space to preview the note name, click to place it, and click placed notes to play them.</span>
+          <span>💡 <strong>Timing Tips:</strong> Choose a Time Signature (4/4, 3/4, 2/4, 6/8) to automatically draw measure barlines. Click any placed note on the staff to select it, then click duration buttons above to change its timing in real-time.</span>
         </div>
       </div>
     `;
@@ -626,6 +828,7 @@ export class SheetMusicStaff {
     this.playBtnEl = this.container.querySelector('#btn-sheet-play')!;
     this.tempoLabelEl = this.container.querySelector('#sheet-tempo-val')!;
     this.tempoSliderEl = this.container.querySelector('#sheet-tempo-slider')!;
+    this.selectionStatusEl = this.container.querySelector('#sheet-selection-status')!;
 
     // Mini Tuner inside Sheet Music tab
     const miniContainer = this.container.querySelector<HTMLElement>('#sheet-mini-tuner')!;
@@ -642,12 +845,11 @@ export class SheetMusicStaff {
       });
     });
 
-    // Wire Accidental buttons
-    this.container.querySelectorAll<HTMLButtonElement>('[data-accidental]').forEach((btn) => {
+    // Wire Time Signature buttons
+    this.container.querySelectorAll<HTMLButtonElement>('[data-time]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.container.querySelectorAll('[data-accidental]').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.activeAccidental = (btn.getAttribute('data-accidental') || '') as AccidentalType;
+        const ts = btn.getAttribute('data-time') as TimeSignatureType;
+        if (ts) this.setTimeSignature(ts);
       });
     });
 
@@ -656,7 +858,18 @@ export class SheetMusicStaff {
       btn.addEventListener('click', () => {
         this.container.querySelectorAll('[data-duration]').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        this.activeDuration = btn.getAttribute('data-duration') as NoteDurationType;
+        const dur = btn.getAttribute('data-duration') as NoteDurationType;
+        this.setDuration(dur);
+      });
+    });
+
+    // Wire Accidental buttons
+    this.container.querySelectorAll<HTMLButtonElement>('[data-accidental]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.container.querySelectorAll('[data-accidental]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const acc = (btn.getAttribute('data-accidental') || '') as AccidentalType;
+        this.setAccidental(acc);
       });
     });
 
@@ -677,6 +890,11 @@ export class SheetMusicStaff {
     this.tempoSliderEl.addEventListener('input', () => {
       this.tempoBpm = parseInt(this.tempoSliderEl.value, 10);
       this.tempoLabelEl.textContent = `${this.tempoBpm} BPM`;
+    });
+
+    // Wire Metronome Toggle
+    this.container.querySelector<HTMLInputElement>('#sheet-metronome-toggle')?.addEventListener('change', (e) => {
+      this.enableMetronome = (e.target as HTMLInputElement).checked;
     });
 
     // Wire Mic Toggle
@@ -719,10 +937,10 @@ export class SheetMusicStaff {
         <!-- Ghost Notehead -->
         <ellipse cx="${pt.x}" cy="${snappedY}" rx="7.2" ry="5.4" transform="rotate(-22 ${pt.x} ${snappedY})" fill="rgba(56, 189, 248, 0.45)" stroke="#38bdf8" stroke-width="1.5" />
 
-        <!-- Ghost Label -->
-        <rect x="${pt.x - 20}" y="${snappedY - 24}" width="40" height="17" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="1" />
-        <text x="${pt.x}" y="${snappedY - 12}" font-size="11" font-weight="700" fill="#38bdf8" text-anchor="middle" font-family="monospace">
-          ${noteLabel}
+        <!-- Ghost Label with Duration -->
+        <rect x="${pt.x - 26}" y="${snappedY - 26}" width="52" height="18" rx="4" fill="#0f172a" stroke="#38bdf8" stroke-width="1" />
+        <text x="${pt.x}" y="${snappedY - 13}" font-size="10" font-weight="700" fill="#38bdf8" text-anchor="middle" font-family="monospace">
+          ${noteLabel} (${this.activeDuration})
         </text>
       `;
     });
@@ -737,7 +955,19 @@ export class SheetMusicStaff {
       this.addNoteAtStep(step);
     });
 
-    // Render placed notes
+    // Deselect note when clicking background
+    this.container.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.placed-note-group') && !target.closest('.pill-btn') && !target.closest('.note-selected-pill')) {
+        if (this.selectedNoteIndex !== null) {
+          this.selectedNoteIndex = null;
+          this.renderNotes();
+          this.updateSelectionStatus();
+        }
+      }
+    });
+
     this.renderNotes();
+    this.updateSelectionStatus();
   }
 }

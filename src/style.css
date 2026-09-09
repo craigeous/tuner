@@ -1776,3 +1776,43 @@ input[type="range"] {
   color: var(--text-muted);
   text-align: center;
 }
+
+.note-selected-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #fff;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.selection-action-tip {
+  color: var(--accent-cyan);
+  font-size: 0.78rem;
+}
+
+.btn-deselect-note {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.btn-deselect-note:hover {
+  background: #334155;
+  color: #fff;
+}
