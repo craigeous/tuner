@@ -1532,3 +1532,247 @@ input[type="range"] {
   background: rgba(239, 68, 68, 0.15);
   color: var(--color-off);
 }
+
+/* ==========================================================================
+   Sheet Music Staff Component
+   ========================================================================== */
+
+.sheet-music-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.sheet-title-wrap h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.sheet-title-wrap p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 600px;
+}
+
+.sheet-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.toolbar-group .group-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.pill-buttons {
+  display: flex;
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.pill-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pill-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pill-btn.active {
+  background: #1e293b;
+  color: var(--accent-cyan);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.playback-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-sheet-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+}
+
+.btn-sheet-play:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.45);
+}
+
+.btn-sheet-play.active {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.4);
+}
+
+.btn-sheet-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  background: #1e293b;
+  border: 1px solid var(--border-subtle);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-sheet-action:hover {
+  background: #334155;
+  color: #fff;
+}
+
+.sheet-options-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.tempo-control-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sheet-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sheet-clef-desc {
+  color: var(--text-secondary);
+}
+
+.sheet-clef-desc strong {
+  color: var(--accent-cyan);
+}
+
+.sheet-svg-wrapper {
+  width: 100%;
+  background: #020617;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.staff-svg {
+  width: 100%;
+  height: auto;
+  min-height: 240px;
+  display: block;
+}
+
+.placed-note-group {
+  transition: transform 0.1s ease;
+}
+
+.placed-note-group:hover ellipse {
+  stroke: #38bdf8 !important;
+  stroke-width: 2px !important;
+}
+
+.note-delete-btn {
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.placed-note-group:hover .note-delete-btn {
+  opacity: 1;
+}
+
+.placed-note-group:hover text {
+  fill: #38bdf8;
+}
+
+@keyframes pulseGlow {
+  0% {
+    r: 8;
+    opacity: 0.85;
+  }
+  50% {
+    r: 16;
+    opacity: 0.2;
+  }
+  100% {
+    r: 8;
+    opacity: 0.85;
+  }
+}
+
+.mic-halo-pulse {
+  animation: pulseGlow 1.4s infinite ease-in-out;
+}
+
+.sheet-footer-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}

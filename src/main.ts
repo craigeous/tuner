@@ -12,6 +12,7 @@ import { PitchHistoryGraph, type VisualizerMode } from './ui/pitchHistoryGraph.t
 import { PianoKeyboard } from './ui/pianoKeyboard.ts';
 import { EarTrainer } from './ui/earTrainer.ts';
 import { MiniTuner } from './ui/miniTuner.ts';
+import { SheetMusicStaff } from './ui/sheetMusicStaff.ts';
 import { INSTRUMENT_PRESETS, type Preset, type PresetNote } from './audio/presets.ts';
 import { NOTE_NAMES_SHARP, NOTE_NAMES_FLAT, freqFromNote, type NotationType } from './audio/pitch.ts';
 
@@ -111,6 +112,9 @@ appRoot.innerHTML = `
     </button>
     <button type="button" class="tab-btn" data-tab="trainer" role="tab" aria-selected="false">
       <span>🎯</span> Pitch Match
+    </button>
+    <button type="button" class="tab-btn" data-tab="sheet" role="tab" aria-selected="false">
+      <span>🎼</span> Sheet Music
     </button>
   </nav>
 
@@ -329,6 +333,11 @@ appRoot.innerHTML = `
     <section class="tab-panel" id="panel-trainer" role="tabpanel">
       <div id="trainer-container"></div>
     </section>
+
+    <!-- ==================== TAB 5: SHEET MUSIC ==================== -->
+    <section class="tab-panel" id="panel-sheet" role="tabpanel">
+      <div id="sheet-container"></div>
+    </section>
   </main>
 
   <!-- Footer with keyboard shortcuts -->
@@ -336,7 +345,7 @@ appRoot.innerHTML = `
     <div class="footer-shortcuts">
       <span>Shortcuts:</span>
       <kbd>Space</kbd> Mic &bull;
-      <kbd>1-4</kbd> Tabs &bull;
+      <kbd>1-5</kbd> Tabs &bull;
       <kbd>Z-M / Q-I</kbd> Play Piano &bull;
       <kbd>[ / ]</kbd> Octaves &bull;
       <kbd>D</kbd> Drone &bull;
@@ -378,6 +387,9 @@ const pianoMiniTuner = new MiniTuner(pianoMiniTunerContainer, {
   compact: true,
 });
 
+const sheetContainer = document.querySelector<HTMLElement>('#sheet-container')!;
+const sheetMusic = new SheetMusicStaff(sheetContainer, toneGen, currentA4);
+
 // --------------------------------------------------------------------------
 // DOM Elements Cache
 // --------------------------------------------------------------------------
@@ -410,10 +422,11 @@ audioInput.subscribe((frame: PitchFrame) => {
   // 3. Update Ear Trainer
   earTrainer.updatePitch(frame);
 
-  // 4. Update in-tab Mini Tuners
+  // 4. Update in-tab Mini Tuners & Sheet Music Live Pitch
   const activeGenNoteLabel = `${NOTE_NAMES_SHARP[genNoteIndex]}${genOctave}`;
   genMiniTuner.update(frame, genFreq, activeGenNoteLabel);
   pianoMiniTuner.update(frame);
+  sheetMusic.updatePitch(frame);
 
   // 5. Update Main Tuner Display
   if (frame.note && frame.frequency > 0) {
@@ -629,6 +642,7 @@ function setA4(newA4: number): void {
   audioInput.setA4(currentA4);
   piano.setA4(currentA4);
   earTrainer.setA4(currentA4);
+  sheetMusic.setA4(currentA4);
   updateGenFrequency();
   renderPresetStrings();
   localStorage.setItem('tunerlab_a4', String(currentA4));
@@ -907,6 +921,8 @@ window.addEventListener('keydown', (e) => {
     switchTab('piano');
   } else if (e.key === '4') {
     switchTab('trainer');
+  } else if (e.key === '5') {
+    switchTab('sheet');
   } else if (e.key.toLowerCase() === 'd' && currentTab !== 'piano') {
     btnDroneToggle.click();
   } else if (e.key.toLowerCase() === 'm' && currentTab !== 'piano') {
