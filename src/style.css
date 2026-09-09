@@ -1816,3 +1816,147 @@ input[type="range"] {
   background: #334155;
   color: #fff;
 }
+
+/* Time Signature Custom Dual-Piece Controls */
+.time-sig-custom-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.time-sig-fraction-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #0f172a;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+}
+
+.time-sig-piece {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.sig-piece-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+.sig-stepper-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.btn-sig-step {
+  background: #1e293b;
+  border: 1px solid var(--border-subtle);
+  color: #fff;
+  border-radius: 4px;
+  width: 22px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: all 0.15s ease;
+}
+
+.btn-sig-step:hover {
+  background: #334155;
+  color: var(--accent-cyan);
+}
+
+.sig-num-input {
+  width: 38px;
+  height: 24px;
+  background: #020617;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.sig-num-input::-webkit-outer-spin-button,
+.sig-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.time-sig-fraction-slash {
+  font-size: 1.25rem;
+  font-weight: 300;
+  color: var(--text-muted);
+  line-height: 1;
+  padding: 0 2px;
+  margin-top: 10px;
+}
+
+.sig-unit-select {
+  height: 24px;
+  background: #020617;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0 0.35rem;
+  cursor: pointer;
+}
+
+.sig-unit-select:focus,
+.sig-num-input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan-glow);
+}
+
+.time-sig-quick-pills {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #0f172a;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.mini-pill-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.mini-pill-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mini-pill-btn.active {
+  background: #1e293b;
+  color: var(--accent-cyan);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}

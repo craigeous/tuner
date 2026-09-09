@@ -1,8 +1,9 @@
 /**
- * Interactive Sheet Music Staff Component with Complete Timing Controls.
- * Supports choosing clef (Treble, Bass, Alto, Tenor), time signatures (4/4, 3/4, 2/4, 6/8),
- * note durations (Whole, Half, Quarter, Eighth, Sixteenth), editing timing of placed notes,
- * visual measure barlines, metronome clicks, and real-time microphone pitch tracking.
+ * Interactive Sheet Music Staff Component with Complete Time Signature & Timing Controls.
+ * Supports choosing clef (Treble, Bass, Alto, Tenor), arbitrary time signatures with separate
+ * top (beats/measure) and bottom (beat unit) selectors, note durations (Whole, Half, Quarter,
+ * Eighth, Sixteenth), in-place timing editing of placed notes, automatic measure barlines,
+ * metronome click on playback, and real-time microphone pitch tracking.
  */
 
 import { freqFromMidi } from '../audio/pitch.ts';
@@ -13,7 +14,6 @@ import { MiniTuner } from './miniTuner.ts';
 export type ClefType = 'treble' | 'bass' | 'alto' | 'tenor';
 export type AccidentalType = '' | '#' | 'b';
 export type NoteDurationType = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth';
-export type TimeSignatureType = '4/4' | '3/4' | '2/4' | '6/8';
 
 export interface PlacedNote {
   id: string;
@@ -61,20 +61,6 @@ const CLEF_CONFIGS: Record<ClefType, ClefConfig> = {
   },
 };
 
-interface TimeSignatureConfig {
-  name: string;
-  top: number;
-  bottom: number;
-  beatsPerMeasure: number; // in quarter-note equivalents
-}
-
-const TIME_SIGNATURE_CONFIGS: Record<TimeSignatureType, TimeSignatureConfig> = {
-  '4/4': { name: '4/4 Common', top: 4, bottom: 4, beatsPerMeasure: 4 },
-  '3/4': { name: '3/4 Waltz', top: 3, bottom: 4, beatsPerMeasure: 3 },
-  '2/4': { name: '2/4 March', top: 2, bottom: 4, beatsPerMeasure: 2 },
-  '6/8': { name: '6/8 Compound', top: 6, bottom: 8, beatsPerMeasure: 3 },
-};
-
 const DIATONIC_LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const SEMITONES_FROM_C: Record<string, number> = {
   C: 0,
@@ -101,7 +87,8 @@ export class SheetMusicStaff {
 
   // Staff & Timing State
   private activeClef: ClefType = 'treble';
-  private activeTimeSignature: TimeSignatureType = '4/4';
+  private timeSigTop: number = 4; // Top piece: beats per measure (1 to 32)
+  private timeSigBottom: number = 4; // Bottom piece: beat unit (1, 2, 4, 8, 16, 32)
   private activeAccidental: AccidentalType = '';
   private activeDuration: NoteDurationType = 'quarter';
   private placedNotes: PlacedNote[] = [];
@@ -154,9 +141,31 @@ export class SheetMusicStaff {
     this.render();
   }
 
-  public setTimeSignature(sig: TimeSignatureType): void {
-    this.activeTimeSignature = sig;
+  /**
+   * Set custom time signature top and bottom pieces.
+   * top = Beats per measure (e.g. 2, 3, 4, 5, 6, 7, 9, 12)
+   * bottom = Beat note value (1=whole, 2=half, 4=quarter, 8=eighth, 16=sixteenth, 32=thirty-second)
+   */
+  public setTimeSignature(top: number, bottom: number): void {
+    this.timeSigTop = Math.max(1, Math.min(32, Math.round(top)));
+    this.timeSigBottom = Math.max(1, Math.min(32, Math.round(bottom)));
     this.render();
+  }
+
+  public getTimeSignature(): { top: number; bottom: number } {
+    return { top: this.timeSigTop, bottom: this.timeSigBottom };
+  }
+
+  /**
+   * Calculates measure length in quarter-note equivalent beats.
+   * e.g., in 4/4: 4 * (4/4) = 4 beats
+   *       in 3/4: 3 * (4/4) = 3 beats
+   *       in 6/8: 6 * (4/8) = 3 beats
+   *       in 7/8: 7 * (4/8) = 3.5 beats
+   *       in 5/4: 5 * (4/4) = 5 beats
+   */
+  public getBeatsPerMeasure(): number {
+    return this.timeSigTop * (4 / this.timeSigBottom);
   }
 
   public setDuration(duration: NoteDurationType): void {
@@ -302,7 +311,7 @@ export class SheetMusicStaff {
     this.selectedNoteIndex = null;
 
     if (this.activeClef === 'treble') {
-      if (this.activeTimeSignature === '3/4') {
+      if (this.timeSigTop === 3) {
         // Waltz rhythm in 3/4
         const steps = [28, 30, 32, 33, 32, 30, 28, 32, 35]; // C4 D4 E4 F4 E4 D4 C4 E4 G4
         const durs: NoteDurationType[] = ['half', 'quarter', 'half', 'quarter', 'quarter', 'quarter', 'quarter', 'half', 'quarter'];
@@ -322,7 +331,7 @@ export class SheetMusicStaff {
           });
         });
       } else {
-        // 4/4 Ode to Joy
+        // Ode to Joy melody
         const steps = [32, 32, 33, 34, 34, 33, 32, 31, 30, 30, 31, 32, 32, 31, 31];
         steps.slice(0, 12).forEach((s, i) => {
           const { octave, baseLetter, midi, freq } = this.stepToNoteInfo(s, '');
@@ -405,7 +414,7 @@ export class SheetMusicStaff {
   }
 
   private isMeasureBoundary(noteIdx: number): boolean {
-    const beatsPerMeasure = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature].beatsPerMeasure;
+    const beatsPerMeasure = this.getBeatsPerMeasure();
     let sum = 0;
     for (let i = 0; i < noteIdx; i++) {
       sum += this.placedNotes[i].beats;
@@ -479,7 +488,7 @@ export class SheetMusicStaff {
 
     const availableWidth = this.staffRight - this.staffLeft - 40;
     const spacing = count > 1 ? Math.min(52, availableWidth / count) : 60;
-    const beatsPerMeasure = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature].beatsPerMeasure;
+    const beatsPerMeasure = this.getBeatsPerMeasure();
 
     let accumulatedBeats = 0;
     let measureCount = 1;
@@ -608,9 +617,9 @@ export class SheetMusicStaff {
 
       this.notesGroupEl.appendChild(g);
 
-      // Measure Barline calculation
+      // Measure Barline calculation based on custom time signature
       accumulatedBeats += n.beats;
-      if (idx < count - 1 && accumulatedBeats >= beatsPerMeasure) {
+      if (idx < count - 1 && accumulatedBeats >= beatsPerMeasure - 0.001) {
         const barX = x + spacing / 2;
         const barG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         barG.innerHTML = `
@@ -626,7 +635,8 @@ export class SheetMusicStaff {
 
   public render(): void {
     const clefConfig = CLEF_CONFIGS[this.activeClef];
-    const timeConfig = TIME_SIGNATURE_CONFIGS[this.activeTimeSignature];
+    const beatsPerMeasure = this.getBeatsPerMeasure();
+    const beatsDisplay = beatsPerMeasure % 1 === 0 ? beatsPerMeasure : beatsPerMeasure.toFixed(2);
 
     this.container.innerHTML = `
       <div class="sheet-music-card">
@@ -634,7 +644,7 @@ export class SheetMusicStaff {
         <div class="sheet-header">
           <div class="sheet-title-wrap">
             <h2>Interactive Sheet Music Staff</h2>
-            <p>Pick clef, set time signature & timing, place notes on staff lines, and edit note values with live audio playback.</p>
+            <p>Pick clef, set any custom time signature (top & bottom pieces), place notes on staff lines, and edit timing in-place.</p>
           </div>
 
           <!-- Embedded Live Pitch Monitor -->
@@ -662,22 +672,44 @@ export class SheetMusicStaff {
             </div>
           </div>
 
-          <!-- 2. Time Signature (Timing) -->
-          <div class="toolbar-group">
+          <!-- 2. Time Signature: Separate Top & Bottom Piece Selectors -->
+          <div class="toolbar-group time-sig-custom-group">
             <span class="group-label">Time Signature:</span>
-            <div class="pill-buttons">
-              <button type="button" class="pill-btn ${this.activeTimeSignature === '4/4' ? 'active' : ''}" data-time="4/4" title="4/4 Common Time (4 beats/measure)">
-                4/4
-              </button>
-              <button type="button" class="pill-btn ${this.activeTimeSignature === '3/4' ? 'active' : ''}" data-time="3/4" title="3/4 Waltz Time (3 beats/measure)">
-                3/4
-              </button>
-              <button type="button" class="pill-btn ${this.activeTimeSignature === '2/4' ? 'active' : ''}" data-time="2/4" title="2/4 March Time (2 beats/measure)">
-                2/4
-              </button>
-              <button type="button" class="pill-btn ${this.activeTimeSignature === '6/8' ? 'active' : ''}" data-time="6/8" title="6/8 Compound Time">
-                6/8
-              </button>
+            <div class="time-sig-fraction-box">
+              <!-- Top piece (Count / Beats per Measure) -->
+              <div class="time-sig-piece" title="Top Number: Number of beats per measure">
+                <span class="sig-piece-label">Beats</span>
+                <div class="sig-stepper-wrap">
+                  <button type="button" class="btn-sig-step" id="btn-sig-top-minus" title="Decrease beats per measure">-</button>
+                  <input type="number" id="time-sig-top-input" min="1" max="32" value="${this.timeSigTop}" class="sig-num-input" aria-label="Beats per measure" />
+                  <button type="button" class="btn-sig-step" id="btn-sig-top-plus" title="Increase beats per measure">+</button>
+                </div>
+              </div>
+
+              <span class="time-sig-fraction-slash">/</span>
+
+              <!-- Bottom piece (Beat Unit note value) -->
+              <div class="time-sig-piece" title="Bottom Number: Note value that gets 1 beat">
+                <span class="sig-piece-label">Note Value</span>
+                <select id="time-sig-bottom-select" class="sig-unit-select" aria-label="Beat unit note value">
+                  <option value="1" ${this.timeSigBottom === 1 ? 'selected' : ''}>1 (Whole)</option>
+                  <option value="2" ${this.timeSigBottom === 2 ? 'selected' : ''}>2 (Half)</option>
+                  <option value="4" ${this.timeSigBottom === 4 ? 'selected' : ''}>4 (Quarter)</option>
+                  <option value="8" ${this.timeSigBottom === 8 ? 'selected' : ''}>8 (Eighth)</option>
+                  <option value="16" ${this.timeSigBottom === 16 ? 'selected' : ''}>16 (Sixteenth)</option>
+                  <option value="32" ${this.timeSigBottom === 32 ? 'selected' : ''}>32 (Thirty-second)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Quick Presets -->
+            <div class="time-sig-quick-pills">
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 4 && this.timeSigBottom === 4 ? 'active' : ''}" data-preset-top="4" data-preset-bottom="4">4/4</button>
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 3 && this.timeSigBottom === 4 ? 'active' : ''}" data-preset-top="3" data-preset-bottom="4">3/4</button>
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 2 && this.timeSigBottom === 4 ? 'active' : ''}" data-preset-top="2" data-preset-bottom="4">2/4</button>
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 6 && this.timeSigBottom === 8 ? 'active' : ''}" data-preset-top="6" data-preset-bottom="8">6/8</button>
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 5 && this.timeSigBottom === 4 ? 'active' : ''}" data-preset-top="5" data-preset-bottom="4">5/4</button>
+              <button type="button" class="mini-pill-btn ${this.timeSigTop === 7 && this.timeSigBottom === 8 ? 'active' : ''}" data-preset-top="7" data-preset-bottom="8">7/8</button>
             </div>
           </div>
 
@@ -760,7 +792,7 @@ export class SheetMusicStaff {
           </label>
 
           <span class="sheet-clef-desc">
-            <strong>${clefConfig.name} • ${timeConfig.name}</strong> (${timeConfig.beatsPerMeasure} beats/measure)
+            <strong>${clefConfig.name} • ${this.timeSigTop}/${this.timeSigBottom} Time</strong> (${beatsDisplay} beats/measure)
           </span>
         </div>
 
@@ -793,11 +825,11 @@ export class SheetMusicStaff {
             </text>
 
             <!-- Dynamic Time Signature (Top / Bottom Numbers) -->
-            <text x="${this.staffLeft + 2}" y="108" font-size="22" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
-              ${timeConfig.top}
+            <text x="${this.staffLeft + 2}" y="108" font-size="${this.timeSigTop > 9 ? '18' : '22'}" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
+              ${this.timeSigTop}
             </text>
-            <text x="${this.staffLeft + 2}" y="136" font-size="22" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
-              ${timeConfig.bottom}
+            <text x="${this.staffLeft + 2}" y="136" font-size="${this.timeSigBottom > 9 ? '18' : '22'}" font-weight="900" fill="#38bdf8" text-anchor="middle" pointer-events="none">
+              ${this.timeSigBottom}
             </text>
 
             <!-- Interactive Clickable Staff Area -->
@@ -815,7 +847,7 @@ export class SheetMusicStaff {
         </div>
 
         <div class="sheet-footer-hint">
-          <span>💡 <strong>Timing Tips:</strong> Choose a Time Signature (4/4, 3/4, 2/4, 6/8) to automatically draw measure barlines. Click any placed note on the staff to select it, then click duration buttons above to change its timing in real-time.</span>
+          <span>💡 <strong>Timing Tips:</strong> Customize both pieces of the time signature (any beats per measure / any note unit). Click any placed note on the staff to select it, then click duration buttons above to change its timing in real-time.</span>
         </div>
       </div>
     `;
@@ -845,11 +877,41 @@ export class SheetMusicStaff {
       });
     });
 
-    // Wire Time Signature buttons
-    this.container.querySelectorAll<HTMLButtonElement>('[data-time]').forEach((btn) => {
+    // Wire Time Signature Top and Bottom inputs
+    const topInput = this.container.querySelector<HTMLInputElement>('#time-sig-top-input')!;
+    topInput.addEventListener('change', () => {
+      const val = parseInt(topInput.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        this.setTimeSignature(val, this.timeSigBottom);
+      }
+    });
+
+    this.container.querySelector('#btn-sig-top-minus')?.addEventListener('click', () => {
+      if (this.timeSigTop > 1) {
+        this.setTimeSignature(this.timeSigTop - 1, this.timeSigBottom);
+      }
+    });
+
+    this.container.querySelector('#btn-sig-top-plus')?.addEventListener('click', () => {
+      if (this.timeSigTop < 32) {
+        this.setTimeSignature(this.timeSigTop + 1, this.timeSigBottom);
+      }
+    });
+
+    const bottomSelect = this.container.querySelector<HTMLSelectElement>('#time-sig-bottom-select')!;
+    bottomSelect.addEventListener('change', () => {
+      const val = parseInt(bottomSelect.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        this.setTimeSignature(this.timeSigTop, val);
+      }
+    });
+
+    // Wire Quick Presets
+    this.container.querySelectorAll<HTMLButtonElement>('[data-preset-top]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const ts = btn.getAttribute('data-time') as TimeSignatureType;
-        if (ts) this.setTimeSignature(ts);
+        const top = parseInt(btn.getAttribute('data-preset-top') || '4', 10);
+        const bottom = parseInt(btn.getAttribute('data-preset-bottom') || '4', 10);
+        this.setTimeSignature(top, bottom);
       });
     });
 
@@ -958,7 +1020,7 @@ export class SheetMusicStaff {
     // Deselect note when clicking background
     this.container.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.placed-note-group') && !target.closest('.pill-btn') && !target.closest('.note-selected-pill')) {
+      if (!target.closest('.placed-note-group') && !target.closest('.pill-btn') && !target.closest('.note-selected-pill') && !target.closest('.time-sig-fraction-box')) {
         if (this.selectedNoteIndex !== null) {
           this.selectedNoteIndex = null;
           this.renderNotes();

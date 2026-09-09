@@ -40,7 +40,11 @@ A high-precision, low-latency web application designed for tuning musical instru
   - Real-time animated bullseye ring, streak counter, and audio chime confirmations.
 - **Interactive Sheet Music Staff**:
   - **Clef Selection**: Choose between 𝄞 Treble, 𝄢 Bass, 𝄡 Alto, and 𝄡 Tenor clefs with dynamic diatonic coordinate alignment.
-  - **Time Signatures & Measures**: Select between `4/4` (Common), `3/4` (Waltz), `2/4` (March), and `6/8` (Compound). Measures are automatically partitioned with visual barlines.
+  - **Arbitrary Time Signatures & Dynamic Measures**: Configure any time signature with independent controls for each piece:
+    - **Top Piece (Beats per Measure)**: Stepper or direct number input (1 to 32 beats).
+    - **Bottom Piece (Beat Unit Note Value)**: Select 1 (Whole), 2 (Half), 4 (Quarter), 8 (Eighth), 16 (Sixteenth), or 32 (Thirty-second).
+    - **Quick Presets**: Instant one-click selection for `4/4`, `3/4`, `2/4`, `6/8`, `5/4`, `7/8`.
+    - Automatically renders on the SVG staff and dynamically calculates measure barlines and metronome clicks.
   - **Note Timing & Durations**: Place and edit Whole (4b), Half (2b), Quarter (1b), Eighth (0.5b), and Sixteenth (0.25b) notes.
   - **In-Place Timing Editing**: Click any placed note on the staff to select it and change its duration or accidental in real time without re-adding.
   - **Melody Sequencer & Metronome**: Play back composed melodies with variable tempo control (40–220 BPM) and an optional audible metronome beat click.
