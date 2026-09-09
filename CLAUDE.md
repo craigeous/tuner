@@ -30,5 +30,7 @@ Local high-performance web app for instrument and vocal pitch detection and tone
   - Interactive piano keys with octave shift controls and microphone pitch illumination.
 - `src/ui/earTrainer.ts`:
   - Pitch match ear training challenge with circular progress ring and streak counter.
+- `src/ui/sheetMusicStaff.ts`:
+  - Interactive sheet music staff with clef selection, note placement, melody sequencer, and microphone pitch reflection.
 - `src/main.ts`:
   - Application wiring, event listeners, localStorage persistence, and keyboard shortcuts.

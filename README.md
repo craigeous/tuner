@@ -38,6 +38,12 @@ A high-precision, low-latency web application designed for tuning musical instru
 - **Pitch Match Trainer (Ear & Voice Training)**:
   - Interactive intonation exercise: hear a target pitch, then sing or play into the mic to match it.
   - Real-time animated bullseye ring, streak counter, and audio chime confirmations.
+- **Interactive Sheet Music Staff**:
+  - **Clef Selection**: Choose between 𝄞 Treble, 𝄢 Bass, 𝄡 Alto, and 𝄡 Tenor clefs with dynamic diatonic coordinate alignment.
+  - **Interactive Note Placement**: Click anywhere on staff lines, spaces, or ledger lines with live hover preview and snapping.
+  - **Accidentals & Durations**: Place naturals (♮), sharps (♯), and flats (♭) across quarter, half, whole, and eighth notes.
+  - **Melody Sequencer & Playback**: Play back composed melodies with variable tempo control (BPM) and step-by-step visual tracking.
+  - **Real-Time Microphone Pitch Reflection**: Live glowing pitch indicator tracks your voice or instrument directly onto the sheet music staff lines as you sing or play!
 
 ## Live Demo
 
